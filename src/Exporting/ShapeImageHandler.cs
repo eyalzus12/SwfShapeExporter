@@ -3,7 +3,10 @@ using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SwfShapeExporter;
 
-public class ShapeExporter
+/// <summary>
+/// An implementation of the IShapeHandler interface for a standard Image
+/// </summary>
+public class ShapeImageHandler : IShapeHandler
 {
     public SolidBrush? Fill{get; set;}
     public Pen? Line{get; set;}
@@ -16,12 +19,7 @@ public class ShapeExporter
         Builder.MoveTo(Offset);
     }
 
-    public void EndShape()
-    {
-        //the swf shape coordinate space is 20 times larger than normal
-        //so we resize it
-        //Canvas?.Mutate(x => x.Resize(x.GetCurrentSize()/20));
-    }
+    public void EndShape(){}
 
     public void BeginFills(){}
     public void EndFills(){}
@@ -29,7 +27,7 @@ public class ShapeExporter
     public void BeginLines(){}
     public void EndLines(bool close)
     {
-        //if(close) Builder.CloseFigure();
+        if(close) Builder.CloseFigure();
         FinalizePath();
     }
 

@@ -1,13 +1,36 @@
 ﻿using SwfShapeExporter;
 
-const string SHAPE_NAME = "a_DemonAnimation_IdleHeavyFrame14";
-const string READ_PATH = @"C:/Program Files (x86)/Steam/steamapps/common/Brawlhalla/bones/Bones_GameModes.swf";
-const string WRITE_PATH = @"C:/Program Files (x86)/Steam/steamapps/common/Brawlhalla/SwfTest.png";
+if(args.Length < 3)
+{
+    Console.WriteLine("Too little arguments given. Format: SOURCE_PATH SPRITE_NAME TARGET_PATH");
+    return;
+}
 
-FileStream read = new(READ_PATH, FileMode.Open, FileAccess.Read);
-SwfLoader loader = new(read);
-var shape = loader.GetShapeTagFromSpriteName(SHAPE_NAME);
+if(args.Length > 3)
+{
+    Console.WriteLine("Too many arguments given. Format: SOURCE_PATH SPRITE_NAME TARGET_PATH");
+    return;
+}
 
-FileStream write = new(WRITE_PATH, FileMode.Create, FileAccess.Write);
-ShapeStreamWriter.ShapeToStreamPNG(shape, write);
+string read_path = args[0];
+string sprite_name = args[1];
+string target_path = args[2];
 
+SwfLoader loader;
+using(FileStream read = new(read_path, FileMode.Open, FileAccess.Read))
+{
+    loader = new(read);
+}
+
+var spriteTag = loader.SpriteTagFromSymbolName(sprite_name);
+var placeObjects = loader.GetPlaceObjectTags(spriteTag);
+var shape = loader.GetShapeTagFromPlaceObjectTag(placeObjects.First());
+
+var image = ShapeToImageConverter.RenderShape(shape);
+
+using(FileStream write = new(target_path, FileMode.Create, FileAccess.Write))
+{
+    image.SaveAsPng(write);
+}
+
+Console.WriteLine("Done");

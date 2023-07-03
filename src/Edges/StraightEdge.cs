@@ -1,5 +1,8 @@
 namespace SwfShapeExporter;
 
+/// <summary>
+/// Represents a straight edge.
+/// </summary>
 public class StraightEdge : IEdge
 {
     public Point From{get; set;}

@@ -1,14 +1,20 @@
+using SwfLib.Tags.ShapeTags;
 using SwfLib.Shapes.Records;
 using SwfLib.Shapes.FillStyles;
 using SwfLib.Shapes.LineStyles;
 
 using EdgeMap = System.Collections.Generic.Dictionary<int,System.Collections.Generic.List<SwfShapeExporter.IEdge>>;
-using CoordMap = System.Collections.Generic.Dictionary<string,System.Collections.Generic.List<SwfShapeExporter.IEdge>>;
+using CoordMap = System.Collections.Generic.Dictionary<SixLabors.ImageSharp.Point,System.Collections.Generic.List<SwfShapeExporter.IEdge>>;
 using Path = System.Collections.Generic.List<SwfShapeExporter.IEdge>;
 
 namespace SwfShapeExporter;
 
-public class SwfShapeRGB
+/// <summary>
+/// Builds and exports an RGB shape.
+/// See also: SwfShapeRGBA.
+/// They are seperated since SwfLib does not define generic classes for fill styles and line styles.
+/// </summary>
+public class SwfShapeRGB : ISwfShape
 {
     public List<IShapeRecordRGB> Records{get; set;} = new();
     public List<FillStyleRGB> FillStyles{get; set;} = new();
@@ -23,7 +29,17 @@ public class SwfShapeRGB
     public CoordMap ReverseCoordMap{get; set;} = new();
     public bool EdgeMapsCreated{get; private set;} = false;
 
-    public void Export(ShapeExporter handler)
+    public SwfShapeRGB(){}
+    public SwfShapeRGB(IList<IShapeRecordRGB> records, IList<FillStyleRGB> fillStyles, IList<LineStyleRGB> lineStyles)
+    {
+        Records = records.ToList();
+        FillStyles = fillStyles.ToList();
+        LineStyles = lineStyles.ToList();
+    }
+    public SwfShapeRGB(DefineShapeTag shape) : this(shape.ShapeRecords, shape.FillStyles, shape.LineStyles){}
+    public SwfShapeRGB(DefineShape2Tag shape) : this(shape.ShapeRecords, shape.FillStyles, shape.LineStyles){}
+
+    public void Export(IShapeHandler handler)
     {
         CreateEdgeMaps();
         handler.BeginShape();
@@ -35,7 +51,7 @@ public class SwfShapeRGB
         handler.EndShape();
     }
 
-    public void ExportFillPath(ShapeExporter handler, int i)
+    public void ExportFillPath(IShapeHandler handler, int i)
     {
         var path = PathFromEdgeMap(FillEdgeMaps[i]);
         if(path.Count == 0) return;
@@ -87,7 +103,7 @@ public class SwfShapeRGB
         handler.EndFills();
     }
 
-    public void ExportLinePath(ShapeExporter handler, int i)
+    public void ExportLinePath(IShapeHandler handler, int i)
     {
         var path = PathFromEdgeMap(LineEdgeMaps[i]);
         if(path.Count == 0) return;
@@ -107,7 +123,7 @@ public class SwfShapeRGB
                 else
                 {
                     var lineStyle = LineStyles[lineStyleIdx-1];
-                    handler.LineStyle(lineStyle.Width/2.0f, lineStyle.Color.ToImageSharpColor());
+                    handler.LineStyle(lineStyle.Width, lineStyle.Color.ToImageSharpColor());
                 }
             }
 
@@ -175,8 +191,9 @@ public class SwfShapeRGB
                         CleanEdgeMap(CurrentLineEdgeMap);
                         FillEdgeMaps.Add(CurrentFillEdgeMap);
                         LineEdgeMaps.Add(CurrentLineEdgeMap);
-                        CurrentFillEdgeMap.Clear();
-                        CurrentLineEdgeMap.Clear();
+                        //we must create new instead of Clear because the edge map lists hold a reference
+                        CurrentFillEdgeMap = new EdgeMap();
+                        CurrentLineEdgeMap = new EdgeMap();
                         currentLineStyleIdx = 0;
                         currentFillStyleIdx0 = 0;
                         currentFillStyleIdx1 = 0;
@@ -325,7 +342,7 @@ public class SwfShapeRGB
 
     public IEdge? FindNextEdgeInCoordMap(IEdge edge)
     {
-        var key = $"{edge.To.X}_{edge.To.Y}";
+        var key = edge.To;
         Path? path = null;
         if(!CoordMap.TryGetValue(key, out path))
             return null;
@@ -336,7 +353,7 @@ public class SwfShapeRGB
 
     public IEdge? FindNextEdgeInReverseCoordMap(IEdge edge)
     {
-        var key = $"{edge.To.X}_{edge.To.Y}";
+        var key = edge.To;
         Path? path = null;
         if(!ReverseCoordMap.TryGetValue(key, out path))
             return null;
@@ -347,7 +364,7 @@ public class SwfShapeRGB
 
     public void RemoveEdgeFromCoordMap(IEdge edge)
     {
-        var key = $"{edge.From.X}_{edge.From.Y}";
+        var key = edge.From;
         if(CoordMap.ContainsKey(key))
         {
             if(CoordMap[key].Count == 1)CoordMap.Remove(key);
@@ -357,7 +374,7 @@ public class SwfShapeRGB
 
     public void RemoveEdgeFromReverseCoordMap(IEdge edge)
     {
-        var key = $"{edge.To.X}_{edge.To.Y}";
+        var key = edge.To;
         if(ReverseCoordMap.ContainsKey(key))
         {
             if(ReverseCoordMap[key].Count == 1)ReverseCoordMap.Remove(key);
@@ -370,8 +387,7 @@ public class SwfShapeRGB
         CoordMap.Clear();
         for(int i = 0; i < path.Count; ++i)
         {
-            var from = path[i].From;
-            var key = $"{from.X}_{from.Y}";
+            var key = path[i].From;
             if(!CoordMap.ContainsKey(key))CoordMap[key] = new();
             CoordMap[key].Add(path[i]);
         }
@@ -382,8 +398,7 @@ public class SwfShapeRGB
         ReverseCoordMap.Clear();
         for(int i = 0; i < path.Count; ++i)
         {
-            var to = path[i].To;
-            var key = $"{to.X}_{to.Y}";
+            var key = path[i].To;
             if(!ReverseCoordMap.ContainsKey(key))ReverseCoordMap[key] = new();
             ReverseCoordMap[key].Add(path[i]);
         }
@@ -391,18 +406,18 @@ public class SwfShapeRGB
 
     public void UpdateEdgeInCoordMap(IEdge edge, IEdge newEdge)
     {
-        var key1 = $"{edge.From.X}_{edge.From.Y}";
+        var key1 = edge.From;
         CoordMap[key1].Remove(edge);
-        var key2 = $"{newEdge.From.X}_{newEdge.From.Y}";
+        var key2 = newEdge.From;
         if(!CoordMap.ContainsKey(key2))CoordMap[key2] = new();
         CoordMap[key2].Add(newEdge);
     }
 
     public void UpdateEdgeInReverseCoordMap(IEdge edge, IEdge newEdge)
     {
-        var key1 = $"{edge.To.X}_{edge.To.Y}";
+        var key1 = edge.To;
         ReverseCoordMap[key1].Remove(edge);
-        var key2 = $"{newEdge.To.X}_{newEdge.To.Y}";
+        var key2 = newEdge.To;
         if(!ReverseCoordMap.ContainsKey(key2))ReverseCoordMap[key2] = new();
         ReverseCoordMap[key2].Add(newEdge);
     }
